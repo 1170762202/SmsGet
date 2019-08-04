@@ -1,13 +1,21 @@
 package com.example.smsget;
 
 import android.Manifest;
+import android.annotation.SuppressLint;
+import android.content.BroadcastReceiver;
+import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
 import android.database.Cursor;
 import android.database.sqlite.SQLiteException;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Message;
 import android.support.annotation.NonNull;
 import android.support.v7.app.AppCompatActivity;
+import android.telephony.SmsMessage;
 import android.util.Log;
 import android.view.View;
 import android.widget.TextView;
@@ -21,6 +29,27 @@ public class MainActivity extends AppCompatActivity {
     private SimpleDateFormat dateFormat;
 
     private TextView textView;
+
+    public static final int RECEIVERED_MSG = 110;
+
+
+    @SuppressLint("HandlerLeak")
+    private Handler handler = new Handler() {
+
+        public void handleMessage(android.os.Message msg) {
+            if (msg.what == RECEIVERED_MSG) {
+                Log.e("TAG", "msg:" + msg.obj);
+//                Toast.makeText(MainActivity.this, "收到：" +
+//                        msg.obj, Toast.LENGTH_SHORT).show();
+//                FileUtil.writeTxt(msg.obj.toString(), MainActivity.this);
+            }
+        }
+
+        ;
+    };
+    private IntentFilter intentFilter;
+    private SMSBroadcastReceiver smsBroadcastReceiver;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -30,8 +59,18 @@ public class MainActivity extends AppCompatActivity {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             requestPermissions(new String[]{Manifest.permission.READ_SMS,
                     Manifest.permission.READ_EXTERNAL_STORAGE,
-                    Manifest.permission.WRITE_EXTERNAL_STORAGE}, 100);
+                    Manifest.permission.WRITE_EXTERNAL_STORAGE,
+                    Manifest.permission.RECEIVE_SMS,
+            }, 100);
         }
+
+
+//        intentFilter = new IntentFilter();
+//        intentFilter.addAction("android.provider.Telephony.SMS_RECEIVED");
+//        smsBroadcastReceiver = new SMSBroadcastReceiver();
+//        //动态注册广播
+//        registerReceiver(smsBroadcastReceiver, intentFilter);
+
     }
 
     @Override
@@ -108,6 +147,7 @@ public class MainActivity extends AppCompatActivity {
                     smsBuilder.append(strDate + ", ");
                     smsBuilder.append(strType);
                     smsBuilder.append(" ]\n\n");
+
                 } while (cur.moveToNext());
 
                 if (!cur.isClosed()) {
@@ -128,6 +168,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private String smsContent;
+
     public void getSmg(View view) {
         Log.e("TAG", "sms:" + getSmsInPhone());
 
@@ -139,7 +180,38 @@ public class MainActivity extends AppCompatActivity {
     }
 
     public void wirteFile(View view) {
-        FileUtil.writeTxt(smsContent,this);
+        FileUtil.writeTxt(smsContent, this);
 
+    }
+
+    class SMSBroadcastReceiver extends BroadcastReceiver {
+
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            Object[] object = (Object[]) intent.getExtras().get("pdus");
+            StringBuilder sb = new StringBuilder();
+            for (Object pdus : object) {
+                byte[] pdusMsg = (byte[]) pdus;
+                SmsMessage sms = SmsMessage.createFromPdu(pdusMsg);
+                String mobile = sms.getOriginatingAddress();//发送短信的手机号
+                String content = sms.getMessageBody();//短信内容
+                //下面是获取短信的发送时间
+                Date date = new Date(sms.getTimestampMillis());
+                String date_time = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(date);
+                //追加到StringBuilder中
+                sb.append("短信发送号码：" + mobile + "\n短信内容：" + content + "\n发送时间：" + date_time + "\n\n");
+
+            }
+            Message msg = new Message();
+            msg.what = RECEIVERED_MSG;
+            msg.obj = sb.toString();
+            handler.sendMessage(msg);
+        }
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+//        unregisterReceiver(smsBroadcastReceiver);
     }
 }
